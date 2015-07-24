@@ -1,0 +1,8 @@
+*.swp
+*.html
+*.#.*
+*flycheck*
+lib
+TODO
+target/
+Cargo.lock
