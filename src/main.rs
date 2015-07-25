@@ -32,8 +32,15 @@ struct Vec3d {
 }
 
 pub struct Particle {
-    p: Vec3d,
+    r: Vec3d,
     v: Vec3d
+}
+
+impl Particle {
+    fn new(rx: f64, ry: f64, rz: f64, vx: f64, vy: f64, vz: f64) {
+        Particle {r: Vec3d {x: 0.0, y:0.0, z:0.0},
+                  v: Vec3d {x: 0.0, y:0.0, z:0.0}}
+    }
 }
 
 
@@ -86,7 +93,7 @@ fn main() {
     let mut app = App {
         gl: GlGraphics::new(opengl),
         particles: vec![Particle {
-            p: Vec3d {x: 0.0, y:0.0, z:0.0},
+            r: Vec3d {x: 0.0, y:0.0, z:0.0},
             v: Vec3d {x: 0.0, y:0.0, z:0.0},
         }]
     };
