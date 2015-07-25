@@ -10,7 +10,7 @@ use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{ GlGraphics, OpenGL };
 use graphics::*;
 use std::f64::consts::PI;
-use std::ops::{Sub, Add};
+use std::cmp;
 use rand::Rng;
 use rand::distributions::{IndependentSample, Range};
 
@@ -39,7 +39,28 @@ pub struct App {
     bbox: Vec<Particle>,
 }
 
+fn v_add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    let mut c = [0.0; 3];
+    for i in 0..3 { c[i] = a[i] + b[i] };
+    c
+}
+
+fn v_sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    let mut c = [0.0; 3];
+    for i in 0..3 { c[i] = a[i] - b[i] };
+    c
+}
+
+fn v_dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    let mut c = 0.0;
+    for i in 0..3 { c += a[i] * b[i] };
+    c
+}
+
+
 impl Particle {
+
+    /// Create a new particle
     fn new(rad: f64,
            rx: f64, ry: f64, rz: f64,
            vx: f64, vy: f64, vz: f64) -> Particle{
@@ -50,23 +71,26 @@ impl Particle {
             ap: [0.0, 0.0, 0.0],
             m: 1.0,
             rad: rad,
-            elast: 0.4,
+            elast: 1.0,
             ellipse: Ellipse::new([0.2, 0.2, 0.2, 1.0]),
         }
     }
 
+    /// Generate particle with random position
     fn random_pos() -> Particle {
         let mut rng = rand::thread_rng();
         let x = Range::new(-BOX_X, BOX_X).ind_sample(&mut rng);
         let y = Range::new(-BOX_Y, BOX_Y).ind_sample(&mut rng);
         let z = Range::new(-BOX_Z, BOX_Z).ind_sample(&mut rng);
-        Particle::new(20.0, x, y, z, 0.0, 0.0, 0.0)
+        Particle::new(10.0, x, y, z, 100.0, 0.0, 0.0)
     }
 
+    /// Get the distance of particle from origin
     fn dist(&self) -> f64 {
         (self.r[0]*self.r[0] + self.r[1]*self.r[1] + self.r[2]*self.r[2]).sqrt()
     }
 
+    /// Scale the apparent radius of the ellipse for perspective
     fn projected_radius(&self) -> f64 {
         let fov = FOVY / 2.0 * PI / 180.0;
         let d = self.r[2] + SCREEN;
@@ -74,10 +98,12 @@ impl Particle {
             (d*d - self.rad*self.rad).sqrt() * WINDOW[0] as f64/1200.0
     }
 
+    /// Get the x or y location as projected on the screen
     fn projected(&self, r: f64) -> f64 {
         SCREEN*r/(self.r[2] + SCREEN*2.0) * WINDOW[0] as f64/1200.0
     }
 
+    /// Update positions and velocities using velocity verlet scheme
     fn verlet(&mut self, dt: f64){
         for j in 0..3 {
             self.r[j] += self.v[j]*dt + 0.5*self.a[j]*dt*dt;
@@ -85,46 +111,80 @@ impl Particle {
         }
     }
 
+    /// Add the acceleration from gravity to the particle
     fn force_gravity (&mut self) {
         self.a[1] -= 1000.0*self.m;
     }
 
-    fn force_total (&mut self) {
+    /// Add the acceleration from pseudo Leonard-Jones potentials from
+    /// surrounding particles
+    fn force_lj (&mut self, positions: &Vec<[f64; 3]>) {
+        let sigma = self.rad * 0.01;
+        let eps = 1.0;
+        for p in positions.iter() {
+            let r = v_sub(*p, self.r);
+            let r_sq = v_dot(r, r);
+            for j in 0..3 {
+                let temp_6 = (sigma / self.r[j]).powi(6);
+                let temp_12 = temp_6 * temp_6;
+                let a = 48.0*eps*(r[j]/r_sq)*(temp_12 - 0.5*temp_6)/self.m;
+                self.a[j] += a;
+            }
+        }
+    }
+
+    /// Call force functions to update the acceleration on the
+    /// particle at this point in time
+    fn force_total (&mut self, positions: &Vec<[f64; 3]>) {
         self.ap = self.a;
         self.a = [0.0; 3];
+        self.force_lj(positions);
         self.force_gravity();
     }
 
-    fn check_boundaries (&mut self) {
-        if self.r[0] < -BOX_X  {
-            self.v[0] = - self.elast * self.v[0];
-            self.r[0] = -BOX_X * 0.99;
-        }
-        if self.r[0] > BOX_X  {
-            self.v[0] = -self.elast * self.v[0];
-            self.r[0] = BOX_X * 0.99;
-        }
-        if self.r[1] < -BOX_Y  {
-            self.v[1] = -self.elast * self.v[1];
-            self.r[1] = -BOX_Y * 0.99;
-        }
-        if self.r[1] > BOX_Y  {
-            self.v[1] = -self.elast * self.v[1];
-            self.r[1] = BOX_Y * 0.99;
-        }
-        if self.r[2] < -BOX_Z  {
-            self.v[2] = -self.elast * self.v[2];
-            self.r[2] = -BOX_Z * 0.99;
-        }
-        if self.r[2] > BOX_Z  {
-            self.v[2] = -self.elast * self.v[2];
-            self.r[2] = BOX_Z * 0.99;
+    fn wall_collision (&mut self) {
+        for i in 0..3 {
+            self.v[i] = self.elast * self.v[i];
         }
     }
 
+    /// Reflect particles off bounding box
+    fn check_boundaries (&mut self) {
+        if self.r[0] < -BOX_X  {
+            self.v[0] = - self.v[0];
+            self.r[0] = -BOX_X;
+            self.wall_collision();
+        }
+        if self.r[0] > BOX_X  {
+            self.v[0] = -self.v[0];
+            self.r[0] = BOX_X;
+            self.wall_collision();
+        }
+        if self.r[1] < -BOX_Y  {
+            self.v[1] = -self.v[1];
+            self.r[1] = -BOX_Y;
+            self.wall_collision();
+        }
+        if self.r[1] > BOX_Y  {
+            self.v[1] = -self.v[1];
+            self.r[1] = BOX_Y;
+            self.wall_collision();
+        }
+        if self.r[2] < -BOX_Z  {
+            self.v[2] = -self.v[2];
+            self.r[2] = -BOX_Z;
+            self.wall_collision();
+        }
+        if self.r[2] > BOX_Z  {
+            self.v[2] = -self.v[2];
+            self.r[2] = BOX_Z;
+            self.wall_collision();
+        }
+    }
+
+    /// Perform all updates on particle given neighbors and delta t
     fn update(&mut self, positions: &Vec<[f64; 3]>, dt: f64) {
-    // fn update(&mut self, a: &Vec<Particle>, dt: f64) {
-        self.force_total();
+        self.force_total(positions);
         self.verlet(dt);
         self.check_boundaries();
     }
