@@ -49,6 +49,14 @@ impl Sub for Vec3d {
     }
 }
 
+// fn force_gravity (&mut p: Particle) {
+//     p.
+// }
+
+// fn force_total (&mut p: Particle) {
+//     p.
+// }
+
 
 impl Particle {
     fn new(rad: f64,
