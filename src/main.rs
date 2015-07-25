@@ -82,12 +82,8 @@ impl App {
                         &c.draw_state, c.transform, gl);
                 };
 
-                for p in particles {
-                    draw(p);
-                }
-                for p in bbox {
-                    draw(p);
-                }
+                for p in particles { draw(p); }
+                for p in bbox      { draw(p); }
 
         });
     }
