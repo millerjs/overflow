@@ -5,3 +5,7 @@ authors = ["Joshua Miller <jshuasmiller@gmail.com>"]
 
 [dependencies]
 nalgebra = "0.2.10"
+piston = "0.4.1"
+piston2d-graphics = "0.4.1"
+pistoncore-glutin_window = "0.5.0"
+piston2d-opengl_graphics = "0.6.0"
