@@ -2,6 +2,7 @@ extern crate piston;
 extern crate graphics;
 extern crate glutin_window;
 extern crate opengl_graphics;
+extern crate rand;
 
 use piston::window::WindowSettings;
 use piston::event::*;
@@ -10,7 +11,8 @@ use opengl_graphics::{ GlGraphics, OpenGL };
 use graphics::*;
 use std::f64::consts::PI;
 use std::ops::{Sub, Add};
-
+use rand::Rng;
+use rand::distributions::{IndependentSample, Range};
 
 const BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 const FOVY: f64 = 60.0;
@@ -51,6 +53,14 @@ impl Particle {
             elast: 0.4,
             ellipse: Ellipse::new([0.2, 0.2, 0.2, 1.0]),
         }
+    }
+
+    fn random_pos() -> Particle {
+        let mut rng = rand::thread_rng();
+        let x = Range::new(-BOX_X, BOX_X).ind_sample(&mut rng);
+        let y = Range::new(-BOX_Y, BOX_Y).ind_sample(&mut rng);
+        let z = Range::new(-BOX_Z, BOX_Z).ind_sample(&mut rng);
+        Particle::new(20.0, x, y, z, 0.0, 0.0, 0.0)
     }
 
     fn dist(&self) -> f64 {
@@ -112,7 +122,7 @@ impl Particle {
         }
     }
 
-    fn update(&mut self, dt: f64) {
+    fn update(&mut self, positions: &Vec<[f64; 3]>, dt: f64) {
     // fn update(&mut self, a: &Vec<Particle>, dt: f64) {
         self.force_total();
         self.verlet(dt);
@@ -152,20 +162,13 @@ impl App {
     }
 
     fn update(&mut self, args: &UpdateArgs) {
-        let positions = vec![];
-        for p1 in self.particles.iter(){
-
+        let mut positions: Vec<[f64; 3]> = vec![];
+        for p in self.particles.iter(){
+            positions.push(p.r);
         }
         for p in self.particles.iter_mut(){
-
+            p.update(&positions, args.dt);
         }
-
-        for p in self.particles.iter_mut(){
-            p.update(args.dt);
-        }
-        // for i in 0..particles.len(){
-        //     self.particles[i].update(&particles, args.dt);
-        // }
     }
 
 }
@@ -194,7 +197,9 @@ fn main() {
     app.bbox.push(Particle::new(20.0,  BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
     app.bbox.push(Particle::new(20.0, -BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
 
-    app.particles.push(Particle::new(20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+    for i in  0..50 {
+        app.particles.push(Particle::random_pos());
+    }
 
     for e in window.events() {
         if let Some(r) = e.render_args() {app.render(&r);}

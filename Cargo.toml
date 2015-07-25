@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Joshua Miller <jshuasmiller@gmail.com>"]
 
 [dependencies]
+rand = "0.3"
 nalgebra = "0.2.10"
 piston = "0.4.1"
 piston2d-graphics = "0.4.1"
