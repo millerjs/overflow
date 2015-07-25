@@ -112,7 +112,8 @@ impl Particle {
         }
     }
 
-    fn update(&mut self, mut particles: Vec<Particle>, dt: f64) {
+    fn update(&mut self, dt: f64) {
+    // fn update(&mut self, a: &Vec<Particle>, dt: f64) {
         self.force_total();
         self.verlet(dt);
         self.check_boundaries();
@@ -151,10 +152,20 @@ impl App {
     }
 
     fn update(&mut self, args: &UpdateArgs) {
-        let mut particles = &self.particles;
-        for i in 0..self.particles.len(){
-            self.particles[i].update(self.particles, args.dt);
+        let positions = vec![];
+        for p1 in self.particles.iter(){
+
         }
+        for p in self.particles.iter_mut(){
+
+        }
+
+        for p in self.particles.iter_mut(){
+            p.update(args.dt);
+        }
+        // for i in 0..particles.len(){
+        //     self.particles[i].update(&particles, args.dt);
+        // }
     }
 
 }
