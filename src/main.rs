@@ -23,8 +23,10 @@ use piston::event::*;
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{ GlGraphics, OpenGL };
 use graphics::*;
+use std::f64::consts::PI;
 
 const BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+const D2PIXEL: f64 = 100.0;
 
 struct Vec3d {
     x: f64,
@@ -51,9 +53,16 @@ impl Particle {
         }
     }
 
-    fn projectedRadius(&mut self) -> f64 {
+    fn dist(&self) -> f64 {
+        (self.r.x*self.r.x + self.r.y*self.r.y + self.r.z*self.r.z).sqrt()
+    }
+
+    fn projectedRadius(&self) -> f64 {
         let fovy = 60.0;
-        let fov =  fovy / 2.0 * PI / 180.0;
+        let fov = fovy / 2.0 * PI / 180.0;
+        let d = self.dist();
+        1.0 / fov.tan() * self.rad / (d*d + self.rad*self.rad).sqrt()
+    }
 
 }
 
@@ -75,18 +84,21 @@ impl App {
                 clear(BACKGROUND, gl);
 
                 for p in particles.iter() {
+                    let rad = p.projectedRadius();
+                    // println!("radius: {}", rad);
                     p.ellipse.draw(
-                        [p.r.x, p.r.y, 20.0, 20.0],
+                        [p.r.x, p.r.y, rad, rad],
                         &c.draw_state, c.transform, gl);
                 }
-
 
         });
     }
 
-    fn update(&mut self, args: &UpdateArgs) {
-        // self.square.x += 10.0 * args.dt;
-        // self.square.y += 10.0 * args.dt;
+    fn update(&mut, self, args: &UpdateArgs) {
+        for p in self.particles.iter() {
+            p.r.x += 10.0 * args.dt;
+        }
+
     }
 
 }
