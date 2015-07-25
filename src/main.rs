@@ -18,6 +18,7 @@ const BOX_X: f64 = 600.0;
 const BOX_Y: f64 = 300.0;
 const BOX_Z: f64 = 300.0;
 const SCREEN: f64 = 600.0;
+const WINDOW: [i64; 2] = [1200, 800];
 
 pub struct Particle {
     r: [f64; 3],      // location
@@ -26,6 +27,7 @@ pub struct Particle {
     ap: [f64; 3],     // acceleration from previous time-step
     m: f64,           // mass
     rad: f64,         // radius
+    elast: f64,
     ellipse: Ellipse, // Graphics
 }
 
@@ -46,7 +48,8 @@ impl Particle {
             ap: [0.0, 0.0, 0.0],
             m: 1.0,
             rad: rad,
-            ellipse: Ellipse::new([0.5, 0.5, 0.5, 1.0]),
+            elast: 0.4,
+            ellipse: Ellipse::new([0.2, 0.2, 0.2, 1.0]),
         }
     }
 
@@ -57,11 +60,12 @@ impl Particle {
     fn projected_radius(&self) -> f64 {
         let fov = FOVY / 2.0 * PI / 180.0;
         let d = self.r[2] + SCREEN;
-        1.0 / fov.tan() * self.rad / (d*d - self.rad*self.rad).sqrt()
+        1.0 / fov.tan() * self.rad /
+            (d*d - self.rad*self.rad).sqrt() * WINDOW[0] as f64/1200.0
     }
 
     fn projected(&self, r: f64) -> f64 {
-        SCREEN*r/(self.r[2] + SCREEN*2.0)
+        SCREEN*r/(self.r[2] + SCREEN*2.0) * WINDOW[0] as f64/1200.0
     }
 
     fn verlet(&mut self, dt: f64){
@@ -83,32 +87,32 @@ impl Particle {
 
     fn check_boundaries (&mut self) {
         if self.r[0] < -BOX_X  {
-            self.v[0] = -1.0 * self.v[0];
+            self.v[0] = - self.elast * self.v[0];
             self.r[0] = -BOX_X * 0.99;
         }
         if self.r[0] > BOX_X  {
-            self.v[0] = -1.0 * self.v[0];
+            self.v[0] = -self.elast * self.v[0];
             self.r[0] = BOX_X * 0.99;
         }
         if self.r[1] < -BOX_Y  {
-            self.v[1] = -1.0 * self.v[1];
+            self.v[1] = -self.elast * self.v[1];
             self.r[1] = -BOX_Y * 0.99;
         }
         if self.r[1] > BOX_Y  {
-            self.v[1] = -1.0 * self.v[1];
+            self.v[1] = -self.elast * self.v[1];
             self.r[1] = BOX_Y * 0.99;
         }
         if self.r[2] < -BOX_Z  {
-            self.v[2] = -1.0 * self.v[2];
+            self.v[2] = -self.elast * self.v[2];
             self.r[2] = -BOX_Z * 0.99;
         }
         if self.r[2] > BOX_Z  {
-            self.v[2] = -1.0 * self.v[2];
+            self.v[2] = -self.elast * self.v[2];
             self.r[2] = BOX_Z * 0.99;
         }
     }
 
-    fn update(&mut self, dt: f64) {
+    fn update(&mut self, mut particles: Vec<Particle>, dt: f64) {
         self.force_total();
         self.verlet(dt);
         self.check_boundaries();
@@ -147,8 +151,9 @@ impl App {
     }
 
     fn update(&mut self, args: &UpdateArgs) {
+        let mut particles = &self.particles;
         for i in 0..self.particles.len(){
-            self.particles[i].update(args.dt);
+            self.particles[i].update(self.particles, args.dt);
         }
     }
 
