@@ -22,6 +22,7 @@ use piston::window::WindowSettings;
 use piston::event::*;
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{ GlGraphics, OpenGL };
+use graphics::*;
 
 const BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
@@ -33,14 +34,20 @@ struct Vec3d {
 
 pub struct Particle {
     r: Vec3d,
-    v: Vec3d
+    v: Vec3d,
+    rad: f64,
+    ellipse: Ellipse,
 }
 
 impl Particle {
-    fn new(rx: f64, ry: f64, rz: f64, vx: f64, vy: f64, vz: f64) -> Particle{
+    fn new(rad: f64,
+           rx: f64, ry: f64, rz: f64,
+           vx: f64, vy: f64, vz: f64) -> Particle{
         Particle {
             r: Vec3d {x: rx, y: ry, z: rz},
-            v: Vec3d {x: vx, y: vy, z: vz}
+            v: Vec3d {x: vx, y: vy, z: vz},
+            rad: rad,
+            ellipse: Ellipse::new([0.5, 0.5, 0.5, 1.0]),
         }
     }
 }
@@ -53,20 +60,20 @@ pub struct App {
 
 impl App {
     fn render(&mut self, args: &RenderArgs) {
-        use graphics::*;
 
         let x = (args.width / 3) as f64;
         let y = (args.height / 2) as f64;
+        let ref particles = self.particles;
 
         self.gl.draw(
             args.viewport(), |c, gl| {
                 clear(BACKGROUND, gl);
 
-                let transform = c.transform.trans(100.0, 100.0);
-
-                let _ellipse = Ellipse::new([0.5, 0.5, 0.5, 1.0]);
-                _ellipse.draw([x, y, 20.0, 20.0], &c.draw_state,
-                              c.transform, gl);
+                for p in particles.iter() {
+                    p.ellipse.draw(
+                        [p.r.x, p.r.y, 20.0, 20.0],
+                        &c.draw_state, c.transform, gl);
+                }
 
 
         });
@@ -93,7 +100,8 @@ fn main() {
         particles: vec![]
     };
 
-    app.particles.push(Particle::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+    app.particles.push(Particle::new(20.0, 100.0, 100.0, 0.0, 0.0, 0.0, 0.0));
+    app.particles.push(Particle::new(20.0, 100.0, 200.0, 0.0, 0.0, 0.0, 0.0));
 
     for e in window.events() {
         if let Some(r) = e.render_args() {app.render(&r);}
