@@ -122,7 +122,7 @@ impl Particle {
         let sigma = self.rad * 0.01;
         let eps = 1.0;
         for p in positions.iter() {
-            let r = v_sub(*p, self.r);
+            let r = v_sub(self.r, *p);
             let r_sq = v_dot(r, r);
             for j in 0..3 {
                 let temp_6 = (sigma / self.r[j]).powi(6);
