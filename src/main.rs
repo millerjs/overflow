@@ -70,10 +70,11 @@ impl Particle {
     }
 
     fn verlet(&mut self, dt: f64){
-        self.r.0 = self.r.0 + self.v.0*dt + 0.5*self.a.0*dt*dt;
-        self.r.1 = self.r.1 + self.v.1*dt + 0.5*self.a.1*dt*dt;
-        self.r.2 = self.r.2 + self.v.2*dt + 0.5*self.a.2*dt*dt;
-
+        for i in 0..2 {
+            self.r.i = self.r.i + self.v.i*dt + 0.5*self.a.i*dt*dt;
+            // self.r.1 = self.r.1 + self.v.1*dt + 0.5*self.a.1*dt*dt;
+            // self.r.2 = self.r.2 + self.v.2*dt + 0.5*self.a.2*dt*dt;
+        }
     }
 
     fn update(&mut self, dt: f64) {
