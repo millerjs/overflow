@@ -1,18 +1,3 @@
-extern crate nalgebra as na;
-
-// use na::{Vec3, Rot3, Rotation};
-
-// fn main() {
-//     let     a = Vec3::new(1.0f64, 1.0, 1.0);
-//     let mut b = Rot3::new(na::zero());
-
-//     b.append_rotation_mut(&a);
-
-//     assert!(na::approx_eq(&na::rotation(&b), &a));
-//     println!("{}", a.x);
-
-// }
-
 extern crate piston;
 extern crate graphics;
 extern crate glutin_window;
@@ -26,7 +11,7 @@ use graphics::*;
 use std::f64::consts::PI;
 
 const BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-const D2PIXEL: f64 = 100.0;
+const SCREEN: f64 = 20.0;
 
 struct Vec3d {
     x: f64,
@@ -57,11 +42,15 @@ impl Particle {
         (self.r.x*self.r.x + self.r.y*self.r.y + self.r.z*self.r.z).sqrt()
     }
 
-    fn projectedRadius(&self) -> f64 {
+    fn projected_radius(&self) -> f64 {
         let fovy = 60.0;
         let fov = fovy / 2.0 * PI / 180.0;
         let d = self.dist();
-        1.0 / fov.tan() * self.rad / (d*d + self.rad*self.rad).sqrt()
+        1.0 / fov.tan() * self.rad / (d*d - self.rad*self.rad).sqrt()
+    }
+
+    fn projected(&self, r: f64) -> f64 {
+        SCREEN*r/self.r.z
     }
 
 }
@@ -70,35 +59,48 @@ impl Particle {
 pub struct App {
     gl: GlGraphics,
     particles: Vec<Particle>,
+    bbox: Vec<Particle>,
 }
 
 impl App {
     fn render(&mut self, args: &RenderArgs) {
-
-        let x = (args.width / 3) as f64;
+        let x = (args.width / 2) as f64;
         let y = (args.height / 2) as f64;
         let ref particles = self.particles;
+        let ref bbox = self.bbox;
 
         self.gl.draw(
             args.viewport(), |c, gl| {
                 clear(BACKGROUND, gl);
 
-                for p in particles.iter() {
-                    let rad = p.projectedRadius();
-                    // println!("radius: {}", rad);
+                let mut draw = |p: &Particle| {
+                    let rad = p.projected_radius() * (args.height as f64)*0.5;
+                    let xx = p.projected(p.r.x);
+                    let yy = p.projected(p.r.y);
                     p.ellipse.draw(
-                        [p.r.x, p.r.y, rad, rad],
+                        [x+xx-rad*0.5, y+yy-rad*0.5, rad, rad],
                         &c.draw_state, c.transform, gl);
+                };
+
+                for p in particles {
+                    draw(p);
+                }
+                for p in bbox {
+                    draw(p);
                 }
 
         });
     }
 
-    fn update(&mut, self, args: &UpdateArgs) {
-        for p in self.particles.iter() {
-            p.r.x += 10.0 * args.dt;
+    fn update(&mut self, args: &UpdateArgs) {
+        for i in 0..self.particles.len(){
+            self.particles[i].r.x += self.particles[i].v.x * args.dt;
+            self.particles[i].r.y += self.particles[i].v.y * args.dt;
+            self.particles[i].r.z += self.particles[i].v.z * args.dt;
+            let lum = ((PI/2.0 - (self.particles[i].dist()/200.).atan())
+                /(PI/2.0)) as f32;
+            self.particles[i].ellipse.color = [lum, lum, lum, 1.0];
         }
-
     }
 
 }
@@ -114,11 +116,22 @@ fn main() {
 
     let mut app = App {
         gl: GlGraphics::new(opengl),
-        particles: vec![]
+        particles: vec![],
+        bbox: vec![],
     };
 
-    app.particles.push(Particle::new(20.0, 100.0, 100.0, 0.0, 0.0, 0.0, 0.0));
-    app.particles.push(Particle::new(20.0, 100.0, 200.0, 0.0, 0.0, 0.0, 0.0));
+
+    app.bbox.push(Particle::new(20.0, -200.0, -200.0, 200.0, 0.0, 0.0, 0.0));
+    app.bbox.push(Particle::new(20.0,  200.0, -200.0, 200.0, 0.0, 0.0, 0.0));
+    app.bbox.push(Particle::new(20.0,  200.0,  200.0, 200.0, 0.0, 0.0, 0.0));
+    app.bbox.push(Particle::new(20.0, -200.0,  200.0, 200.0, 0.0, 0.0, 0.0));
+    app.bbox.push(Particle::new(20.0, -200.0, -200.0, 20.0, 0.0, 0.0, 0.0));
+    app.bbox.push(Particle::new(20.0,  200.0, -200.0, 20.0, 0.0, 0.0, 0.0));
+    app.bbox.push(Particle::new(20.0,  200.0,  200.0, 20.0, 0.0, 0.0, 0.0));
+    app.bbox.push(Particle::new(20.0, -200.0,  200.0, 20.0, 0.0, 0.0, 0.0));
+
+    // app.particles.push(Particle::new(20.0, 0.0, 0.0, 20.0, 0.0, 0.0, 0.0));
+
 
     for e in window.events() {
         if let Some(r) = e.render_args() {app.render(&r);}
