@@ -50,6 +50,11 @@ impl Particle {
             ellipse: Ellipse::new([0.5, 0.5, 0.5, 1.0]),
         }
     }
+
+    fn projectedRadius(&mut self) -> f64 {
+        let fovy = 60.0;
+        let fov =  fovy / 2.0 * PI / 180.0;
+
 }
 
 
