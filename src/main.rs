@@ -37,9 +37,11 @@ pub struct Particle {
 }
 
 impl Particle {
-    fn new(rx: f64, ry: f64, rz: f64, vx: f64, vy: f64, vz: f64) {
-        Particle {r: Vec3d {x: 0.0, y:0.0, z:0.0},
-                  v: Vec3d {x: 0.0, y:0.0, z:0.0}}
+    fn new(rx: f64, ry: f64, rz: f64, vx: f64, vy: f64, vz: f64) -> Particle{
+        Particle {
+            r: Vec3d {x: rx, y: ry, z: rz},
+            v: Vec3d {x: vx, y: vy, z: vz}
+        }
     }
 }
 
@@ -55,9 +57,6 @@ impl App {
 
         let x = (args.width / 3) as f64;
         let y = (args.height / 2) as f64;
-        // let x = (args.width / 3) as f64 + self.square.x;
-        // let y = (args.height / 2) as f64 + self.square.y;
-
 
         self.gl.draw(
             args.viewport(), |c, gl| {
@@ -65,11 +64,10 @@ impl App {
 
                 let transform = c.transform.trans(100.0, 100.0);
 
-                Ellipse::new([0.5, 0.5, 0.5, 1.0])
-                    .draw([x, y, 20.0, 20.0],
-                          &c.draw_state,
-                          c.transform,
-                          gl);
+                let _ellipse = Ellipse::new([0.5, 0.5, 0.5, 1.0]);
+                _ellipse.draw([x, y, 20.0, 20.0], &c.draw_state,
+                              c.transform, gl);
+
 
         });
     }
@@ -86,17 +84,16 @@ fn main() {
 
     let window = Window::new(
         WindowSettings::new(
-            "spinning-square", [1200, 800])
+            "overflow", [1200, 800])
             .opengl(opengl)
             .exit_on_esc(true));
 
     let mut app = App {
         gl: GlGraphics::new(opengl),
-        particles: vec![Particle {
-            r: Vec3d {x: 0.0, y:0.0, z:0.0},
-            v: Vec3d {x: 0.0, y:0.0, z:0.0},
-        }]
+        particles: vec![]
     };
+
+    app.particles.push(Particle::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
 
     for e in window.events() {
         if let Some(r) = e.render_args() {app.render(&r);}
