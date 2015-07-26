@@ -8,7 +8,7 @@ use std::f64::consts::PI;
 use std::cmp;
 use rand::Rng;
 use rand::distributions::{IndependentSample, Range};
-use image::ImageBuffer;
+use image::{ImageBuffer, Rgb};
 
 const BACKGROUND: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 const FOVY: f64 = 60.0;
@@ -82,36 +82,19 @@ impl Image {
         }
     }
 
-    fn save(mut self, path: &str) {
-        let mut imgbuf = image::ImageBuffer::new(
+    fn save(&mut self, path: &str) {
+        let mut imgbuf = image::ImageBuffer::<Rgb<u8>>::new(
             self.width as u32, self.height as u32);
 
         // Iterate over the coordiantes and pixels of the image
-        for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            // let cy = y as f32 * scaley - 2.0;
-            // let cx = x as f32 * scalex - 2.0;
-
-            // let mut z = Complex::new(cx, cy);
-            // let c = Complex::new(-0.4, 0.6);
-
-            // let mut i = 0;
-
-            // for t in (0..max_iterations) {
-            //     if z.norm() > 2.0 {
-            //         break
-            //     }
-            //     z = z * z + c;
-            //     i = t;
-            // }
-
-            // // Create an 8bit pixel of type Luma and value i
-            // // and assign in to the pixel at position (x, y)
-            // *pixel = image::Luma([i as u8]);
+        for x in 0..self.width/2 {
+            for y in 0..self.height/2 {
+                let px = self.pixels[x*self.width + y];
+                imgbuf.get_pixel_mut(x as u32, y as u32).data = [px[0], px[1], px[2]];
+            }
         }
 
-
-        let ref mut fout = File::create(&Path::new(path)).unwrap();
-        let _ = image::ImageLuma8(imgbuf).save(fout, image::PNG);
+        imgbuf.save("output.png").unwrap();
     }
 
 }
@@ -291,7 +274,7 @@ impl Domain {
 
     fn setup(&mut self) {
 
-        for i in 0..100 {
+        for _ in 0..100 {
             self.particles.push(Particle::random_pos());
         }
 
@@ -339,7 +322,7 @@ fn main() {
 
     domain.setup();
 
-    for i in 0..5 {
+    for _ in 0..5 {
         domain.update();
     }
 
