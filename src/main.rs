@@ -198,7 +198,7 @@ impl Particle {
         let fov = FOVY / 2.0 * PI / 180.0;
         let d = self.r[2] + SCREEN;
         (1.0 / fov.tan() * self.rad /
-            (d*d - self.rad*self.rad).sqrt() * IMAGE_Y as f64).abs()
+            (d*d - self.rad*self.rad).sqrt() * IMAGE_Y/2 as f64).abs()
     }
 
     /// Get the x or y location as projected on the screen
