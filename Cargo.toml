@@ -7,3 +7,4 @@ authors = ["Joshua Miller <jshuasmiller@gmail.com>"]
 rand = "0.3"
 image = "*"
 num = "*"
+threadpool = "*"
