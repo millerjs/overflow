@@ -137,7 +137,6 @@ impl Image {
         thread::spawn(move || {
             let path = format!("output/test_{:08}.png", step);
             imgbuf.save(&*path).unwrap();
-            println!("Wrote '{}'", path);
         })
 
     }
@@ -370,26 +369,24 @@ impl Domain {
 
         for p in self.particles.iter_mut() {
             let tx = tx.clone();
-            let mut _p = p.clone();
             let pos = shared_pos.clone();
+            let mut _p = p.clone();
             pool.execute(move|| {
                 _p.update(&pos, dt);
-                tx.send(());
+                let _ = tx.send(_p);
             });
         }
 
-        for p in self.particles.iter_mut() {
-            let _ = rx.recv();
+        for i in 0..self.particles.len() {
+            self.particles[i] = rx.recv().unwrap();
         }
 
-        // for p in self.particles.iter_mut(){
-        //     p.update(pos, self.dt);
-        // }
         self.t += self.dt;
     }
 
     fn print_state(&self) {
-        println!("\tDomain:\tt={:.*}", 2, self.t);
+        println!("\tDomain:\trender_step={}\t\tt={:.*}",
+                 self.render_step, 2, self.t);
     }
 
 }
@@ -414,8 +411,8 @@ fn main() {
 
     while domain.t < max_time {
         domain.update();
-        domain.print_state();
         if step % (1.0/domain.dt/10.0) as i32 == 0 {
+            domain.print_state();
             domain.render();
             domain.image.save(domain.render_step);
         }
