@@ -6,3 +6,5 @@ lib
 TODO
 target/
 Cargo.lock
+output*
+temp*
