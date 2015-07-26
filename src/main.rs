@@ -55,25 +55,22 @@ impl Image {
     }
 
     fn set_point(&mut self, x: f64, y: f64, pixel: [f32; 4]) {
-        let t = self.translate(x, y);
-        self.set_pixel(t[0], t[1], pixel);
+        let x = self.translate(x);
+        let y = self.translate(y);
+        self.set_pixel(x, y, pixel);
     }
 
-    fn translate(&self, x: f64, y: f64) -> [usize; 2] {
-        [self.width / 2 - (x * SCALE) as usize,
-         self.height / 2 - (x * SCALE) as usize]
+    fn translate(&self, v: f64) -> usize {
+         (v * SCALE) as usize
     }
 
-    fn draw_circle(&mut self, x: f64, y: f64, r: f64, pixel: [f32; 4]) {
-        let t = self.translate(x, y);
-        let x = t[0] as u32;
-        let y = t[1] as u32;
-        let x0 = x;
-        while x < x0 {
-            let x = ((x*x - 2*y - 1) as f64).sqrt();
-            let y = ((r*r - x*x) as f64).sqrt();
-            self.set_pixel(x as usize, y as usize, pixel);
-        }
+    fn draw_circle(&mut self, _x: f64, _y: f64, r: f64, pixel: [f32; 4]) {
+        let x0 = (self.width / 2 - self.translate(_x)) as u32;
+        let y0 = (self.height/2 - self.translate(_y)) as u32;
+        let x = r;
+        // while x > y {
+        //     self.set_pixel()
+        // }
     }
 
     fn clear(&mut self, color: [f32; 4]) {
@@ -83,6 +80,7 @@ impl Image {
     }
 
     fn save(&mut self, path: &str) {
+        println!("Generating image");
         let mut imgbuf = image::ImageBuffer::<Rgb<u8>>::new(
             self.width as u32, self.height as u32);
 
@@ -94,6 +92,7 @@ impl Image {
             }
         }
 
+        println!("Saving image to '{}'", path);
         imgbuf.save("output.png").unwrap();
     }
 
