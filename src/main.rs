@@ -1,24 +1,33 @@
 extern crate num;
 extern crate rand;
 extern crate image;
+extern crate threadpool;
 
+// Usage statements
 use std::f64::consts::PI;
 use std::thread;
 use rand::distributions::{IndependentSample, Range};
 use image::{ImageBuffer, Rgb};
+use threadpool::ThreadPool;
+use std::sync::mpsc::channel;
+use std::sync::Arc;
 
+// Field of view
 const FOVY: f64 = 60.0;
 
+// Bounding box dim constatns
 const BOX_X: f64 = 600.0;
 const BOX_Y: f64 = 300.0;
 const BOX_Z: f64 = 300.0;
 
+// Image constants
 const IMAGE_X: i32 = 300;
 const IMAGE_Y: i32 = 200;
-
 const SCREEN: f64 = 600.0;
 const SCALE: f64 = IMAGE_X as f64 / 1200.0;
 
+
+#[derive(Debug, Copy, Clone)]
 pub struct Particle {
     r: [f64; 3],      // location
     v: [f64; 3],      // velocity
@@ -34,6 +43,16 @@ pub struct Image {
     width: i32,
     height: i32,
 }
+
+pub struct Domain {
+    render_step: u32,
+    t: f64,
+    dt: f64,
+    particles: Vec<Particle>,
+    bbox: Vec<Particle>,
+    image: Image,
+}
+
 
 #[allow(dead_code)]
 impl Image {
@@ -126,15 +145,6 @@ impl Image {
 }
 
 
-pub struct Domain {
-    render_step: u32,
-    t: f64,
-    dt: f64,
-    particles: Vec<Particle>,
-    bbox: Vec<Particle>,
-    image: Image,
-}
-
 #[allow(dead_code)]
 fn v_add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     let mut c = [0.0; 3];
@@ -210,7 +220,7 @@ impl Particle {
         for j in 0..3 {
             self.r[j] += self.v[j]*dt + 0.5*self.a[j]*dt*dt;
             self.v[j] += 0.5*(self.a[j] + self.ap[j])*dt;
-            self.v[j] = self.v[j].min(1e4).max(-1e4);
+            self.v[j] = self.v[j].min(1e3).max(-1e3);
         }
     }
 
@@ -247,10 +257,8 @@ impl Particle {
         self.force_gravity();
     }
 
-    fn wall_collision (&mut self) {
-        for i in 0..3 {
-            self.v[i] = self.elast * self.v[i];
-        }
+    fn wall_collision (&mut self, dir: usize) {
+        self.v[dir] = self.elast * self.v[dir];
     }
 
     /// Reflect particles off bounding box
@@ -259,32 +267,32 @@ impl Particle {
         if self.r[0] < -BOX_X  {
             self.v[0] = - self.v[0];
             self.r[0] = -BOX_X + buffer;
-            self.wall_collision();
+            self.wall_collision(0);
         }
         if self.r[0] > BOX_X  {
             self.v[0] = -self.v[0];
             self.r[0] = BOX_X - buffer;
-            self.wall_collision();
+            self.wall_collision(0);
         }
         if self.r[1] < -BOX_Y  {
             self.v[1] = -self.v[1];
             self.r[1] = -BOX_Y + buffer;
-            self.wall_collision();
+            self.wall_collision(1);
         }
         if self.r[1] > BOX_Y  {
             self.v[1] = -self.v[1];
             self.r[1] = BOX_Y -  buffer;
-            self.wall_collision();
+            self.wall_collision(1);
         }
         if self.r[2] < -BOX_Z  {
             self.v[2] = -self.v[2];
             self.r[2] = -BOX_Z + buffer;
-            self.wall_collision();
+            self.wall_collision(2);
         }
         if self.r[2] > BOX_Z  {
             self.v[2] = -self.v[2];
             self.r[2] = BOX_Z - buffer;
-            self.wall_collision();
+            self.wall_collision(2);
         }
     }
 
@@ -313,31 +321,22 @@ impl Domain {
                     self.particles.push(Particle::new(
                         rad,
                         x as f64 * rad * 5.0 + range.ind_sample(&mut rng),
-                        y as f64 * rad * 5.0 + range.ind_sample(&mut rng),
+                        - BOX_Y + (y as f64 * rad * 5.0 +
+                                   range.ind_sample(&mut rng)),
                         z as f64 * rad * 5.0 + range.ind_sample(&mut rng),
                         0.0, 0.0, 0.0));
                 }
             }
         }
 
-        // for _ in 0..250 {
-        //     self.particles.push(Particle::random_pos());
-        // }
-
-        // self.particles.push(Particle::new(
-        //     10.0, -BOX_X/2.0, 0.0, 0.0, 0.0, 0.0, 0.0));
-        // self.particles.push(Particle::new(
-        //     10.0, BOX_X/2.0, 0.0,  0.0, 0.0, 0.0, 0.0));
-
-
-        self.bbox.push(Particle::new(10.0, -BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(10.0,  BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(10.0,  BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(10.0, -BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(10.0, -BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(10.0,  BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(10.0,  BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(10.0, -BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(5.0, -BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(5.0,  BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(5.0,  BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(5.0, -BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(5.0, -BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(5.0,  BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(5.0,  BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(5.0, -BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
     }
 
 
@@ -362,9 +361,30 @@ impl Domain {
         for p in self.particles.iter(){
             positions.push(p.r);
         }
-        for p in self.particles.iter_mut(){
-            p.update(&positions, self.dt);
+
+        let shared_pos = Arc::new(positions);
+        let pool = ThreadPool::new(4);
+
+        let (tx, rx) = channel();
+        let dt = self.dt;
+
+        for p in self.particles.iter_mut() {
+            let tx = tx.clone();
+            let mut _p = p.clone();
+            let pos = shared_pos.clone();
+            pool.execute(move|| {
+                _p.update(&pos, dt);
+                tx.send(());
+            });
         }
+
+        for p in self.particles.iter_mut() {
+            let _ = rx.recv();
+        }
+
+        // for p in self.particles.iter_mut(){
+        //     p.update(pos, self.dt);
+        // }
         self.t += self.dt;
     }
 
