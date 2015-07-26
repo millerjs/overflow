@@ -13,8 +13,8 @@ const BOX_X: f64 = 600.0;
 const BOX_Y: f64 = 300.0;
 const BOX_Z: f64 = 300.0;
 
-const IMAGE_X: i32 = 400;
-const IMAGE_Y: i32 = 300;
+const IMAGE_X: i32 = 300;
+const IMAGE_Y: i32 = 200;
 
 const SCREEN: f64 = 600.0;
 const SCALE: f64 = IMAGE_X as f64 / 1200.0;
@@ -46,7 +46,6 @@ impl Image {
     }
 
     fn set_pixel(&mut self, x: i32, y: i32, pixel: [f32; 4]) {
-        // println!("{} {}", x, y);
         if x < self.width && x > 0 && y < self.height && y > 0 {
             for i in 0..4 {
                 let idx = (self.height * x + y) as usize;
@@ -104,7 +103,6 @@ impl Image {
     }
 
     fn save(&mut self, step: u32) -> thread::JoinHandle<()> {
-        println!(" - Generating image at step {}", step);
         let mut imgbuf = ImageBuffer::<Rgb<u8>>::new(
             self.width as u32, self.height as u32);
 
@@ -119,9 +117,8 @@ impl Image {
 
         thread::spawn(move || {
             let path = format!("output/test_{:08}.png", step);
-            println!(" - Saving image to '{}'", path);
             imgbuf.save(&*path).unwrap();
-            println!(" - Wrote '{}'", path);
+            println!("Wrote '{}'", path);
         })
 
     }
@@ -226,15 +223,14 @@ impl Particle {
     /// surrounding particles
     fn force_lj (&mut self, positions: &Vec<[f64; 3]>) {
         let sigma = self.rad / 1.122 * 2.0;
-        let eps = 1.0e5;
+        let eps = 1.0e4;
         for p in positions.iter() {
             let r = v_sub(self.r, *p);
             let r_sq = v_dot(r, r);
             if r_sq > 1e-5 {
                 let norm = r_sq.sqrt();
-                let temp_7 = (sigma / norm).powi(7);
-                let temp_13 = (sigma / norm).powi(13);
-                let a = eps / sigma * (2.0 * temp_13 - temp_7);
+                let a = eps / sigma * (
+                    2.0 * (sigma/norm).powi(13) - (sigma/norm).powi(7));
                 for j in 0..3 {
                     self.a[j] -= a * r[0] / norm;
                 }
@@ -306,7 +302,7 @@ impl Domain {
 
     fn setup(&mut self) {
 
-        let n = 5;
+        let n = 7;
         let rad = 10.0;
         let mut rng = rand::thread_rng();
         let range = Range::new(-rad/3.0, rad/3.0);
@@ -373,7 +369,7 @@ impl Domain {
     }
 
     fn print_state(&self) {
-        println!("Domain:\tt={:.*}", 2, self.t);
+        println!("\tDomain:\tt={:.*}", 2, self.t);
     }
 
 }
@@ -389,19 +385,19 @@ fn main() {
         t: 0.0,
         image: Image::new(IMAGE_X, IMAGE_Y),
     };
-
     println!("Created image buffer of length {} KB", IMAGE_X*IMAGE_Y/1000);
+
     domain.setup();
 
-    let max_time = 3.0;
+    let max_time = 5.0;
     let mut step = 0;
 
     while domain.t < max_time {
         domain.update();
+        domain.print_state();
         if step % (1.0/domain.dt/10.0) as i32 == 0 {
             domain.render();
             domain.image.save(domain.render_step);
-            domain.print_state();
         }
         step += 1;
     }
