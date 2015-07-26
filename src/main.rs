@@ -15,10 +15,11 @@ const FOVY: f64 = 60.0;
 const BOX_X: f64 = 600.0;
 const BOX_Y: f64 = 300.0;
 const BOX_Z: f64 = 300.0;
-const IMAGE_X: usize = 1200;
-const IMAGE_Y: usize = 800;
+
+const IMAGE_X: i32 = 1200;
+const IMAGE_Y: i32 = 800;
+
 const SCREEN: f64 = 600.0;
-const WINDOW: [i64; 2] = [1200, 800];
 const SCALE: f64 = 1.0;
 
 pub struct Particle {
@@ -33,12 +34,12 @@ pub struct Particle {
 
 pub struct Image {
     pixels: Vec<[u8; 4]>,
-    width: usize,
-    height: usize,
+    width: i32,
+    height: i32,
 }
 
 impl Image {
-    fn new(width: usize, height: usize) -> Image {
+    fn new(width: i32, height: i32) -> Image {
         Image {
             pixels: vec![[0; 4]; width as usize * height as usize],
             width: width,
@@ -46,12 +47,18 @@ impl Image {
         }
     }
 
-    fn set_pixel(&mut self, x: usize, y: usize, pixel: [f32; 4]) {
+    fn set_pixel(&mut self, x: i32, y: i32, pixel: [f32; 4]) {
+        // println!("{} {}", x, y);
         if x < self.width && x > 0 && y < self.height && y > 0 {
-            for i in 0..5 {
-                self.pixels[self.width * x + y][i] = (pixel[i]*255.0) as u8;
+            for i in 0..4 {
+                let idx = (self.height * x + y) as usize;
+                self.pixels[idx][i] = (pixel[i]*255.0) as u8;
             }
         }
+    }
+
+    fn get_pixel(&mut self, x: i32, y: i32) -> [u8; 4]{
+        self.pixels[(self.height * x + y) as usize]
     }
 
     fn set_point(&mut self, x: f64, y: f64, pixel: [f32; 4]) {
@@ -60,21 +67,42 @@ impl Image {
         self.set_pixel(x, y, pixel);
     }
 
-    fn translate(&self, v: f64) -> usize {
-         (v * SCALE) as usize
+    fn translate(&self, v: f64) -> i32 {
+         (v * SCALE) as i32
     }
 
     fn draw_circle(&mut self, _x: f64, _y: f64, r: f64, pixel: [f32; 4]) {
-        let x0 = (self.width / 2 - self.translate(_x)) as u32;
-        let y0 = (self.height/2 - self.translate(_y)) as u32;
-        let x = r;
-        // while x > y {
-        //     self.set_pixel()
-        // }
+        println!("Circle at ({}, {}): {}", _x, _y, r);
+        let x0 = (self.width / 2 - self.translate(_x)) as i32;
+        let y0 = (self.height/2 - self.translate(_y)) as i32;
+        println!("Translated to at ({}, {}): {}", x0, y0, r);
+        let mut x = r as i32;
+        let mut y = 0;
+        let mut decisionOver2 = 1 - x;
+
+        while x > y {
+            self.set_pixel(( x + x0) as i32, ( y + y0) as i32, pixel);
+            self.set_pixel(( y + x0) as i32, ( x + y0) as i32, pixel);
+            self.set_pixel((-x + x0) as i32, ( y + y0) as i32, pixel);
+            self.set_pixel((-y + x0) as i32, ( x + y0) as i32, pixel);
+            self.set_pixel((-x + x0) as i32, (-y + y0) as i32, pixel);
+            self.set_pixel((-y + x0) as i32, (-x + y0) as i32, pixel);
+            self.set_pixel(( x + x0) as i32, (-y + y0) as i32, pixel);
+            self.set_pixel(( y + x0) as i32, (-x + y0) as i32, pixel);
+            y += 1;
+            if (decisionOver2<=0) {
+                // Change in decision criterion for y -> y+1
+                decisionOver2 += 2 * y + 1;
+            } else {
+                x -= 1;
+                // Change for y -> y+1, x -> x-1
+                decisionOver2 += 2 * (y - x) + 1;
+            }
+        }
     }
 
     fn clear(&mut self, color: [f32; 4]) {
-        for i in 0..self.width*self.height {
+        for i in 0..(self.width*self.height) as usize {
             self.pixels[i] = [0; 4];
         }
     }
@@ -85,15 +113,16 @@ impl Image {
             self.width as u32, self.height as u32);
 
         // Iterate over the coordiantes and pixels of the image
-        for x in 0..self.width/2 {
-            for y in 0..self.height/2 {
-                let px = self.pixels[x*self.width + y];
-                imgbuf.get_pixel_mut(x as u32, y as u32).data = [px[0], px[1], px[2]];
+        for x in 0..self.width {
+            for y in 0..self.height {
+                let px = self.get_pixel(x, y);
+                imgbuf.get_pixel_mut(x as u32, y as u32).data = [
+                    px[0], px[1], px[2]];
             }
         }
 
         println!("Saving image to '{}'", path);
-        imgbuf.save("output.png").unwrap();
+        imgbuf.save(path).unwrap();
     }
 
 }
@@ -168,13 +197,13 @@ impl Particle {
     fn projected_radius(&self) -> f64 {
         let fov = FOVY / 2.0 * PI / 180.0;
         let d = self.r[2] + SCREEN;
-        1.0 / fov.tan() * self.rad /
-            (d*d - self.rad*self.rad).sqrt() * WINDOW[0] as f64/1200.0
+        (1.0 / fov.tan() * self.rad /
+            (d*d - self.rad*self.rad).sqrt() * IMAGE_Y as f64).abs()
     }
 
     /// Get the x or y location as projected on the screen
     fn projected(&self, r: f64) -> f64 {
-        SCREEN*r/(self.r[2] + SCREEN*2.0) * WINDOW[0] as f64/1200.0
+        SCREEN*r/(self.r[2] + SCREEN*2.0)
     }
 
     /// Update positions and velocities using velocity verlet scheme
@@ -277,18 +306,26 @@ impl Domain {
             self.particles.push(Particle::random_pos());
         }
 
-        self.bbox.push(Particle::new(20.0, -BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(20.0,  BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(20.0,  BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(20.0, -BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(20.0, -BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(20.0,  BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(20.0,  BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(20.0, -BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0, -BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0,  BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0,  BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0, -BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0, -BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0,  BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0,  BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0, -BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
     }
 
-    fn render(&mut self) {
 
+    fn render(&mut self) {
+        for p in self.bbox.iter(){
+            self.image.draw_circle(
+                p.projected(p.r[0]), p.projected(p.r[1]), p.projected_radius(),
+                [1.0; 4]);
+        }
+        // for p in self.particles.iter_mut(){
+
+        // }
     }
 
     fn update(&mut self) {
@@ -320,12 +357,8 @@ fn main() {
     println!("Created image buffer of length {} KB", IMAGE_X*IMAGE_Y/1000);
 
     domain.setup();
-
-    for _ in 0..5 {
-        domain.update();
-    }
-
-    domain.image.draw_circle(0.0, 0.0, 20.0, [0.5; 4]);
+    domain.update();
+    domain.render();
     domain.image.save("output/test.png");
 
 }
