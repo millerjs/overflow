@@ -23,7 +23,7 @@ const BOX_Z: f64 = 1.0;
 // Image constants
 const IMAGE_X: i32 = 600;
 const IMAGE_Y: i32 = 400;
-const SCREEN: [f64; 3] = [0.0, 0.0, -400.0];
+const SCREEN: f64 = 400.0;
 const SCALE: f64 = IMAGE_X as f64 / 1200.0;
 const F_G: f64 = 1000.0;
 
@@ -199,11 +199,15 @@ impl Particle {
         Particle::new(10.0, x, y, z, 0.0, 0.0, 0.0)
     }
 
+    /// Get the distance of particle from origin
+    fn dist(&self) -> f64 {
+        (self.r[0]*self.r[0] + self.r[1]*self.r[1] + self.r[2]*self.r[2]).sqrt()
+    }
+
     /// Scale the apparent radius of the ellipse for perspective
     fn projected_radius(&self) -> f64 {
         let fov = FOVY / 2.0 * PI / 180.0;
-        let r = v_sub(self.r, CAMERA);
-        let d = v_dot(r, r);
+        let d = self.r[2] + SCREEN;
         (1.2e-1 / fov.tan() * self.rad /
             (d*d - self.rad*self.rad).sqrt() * (IMAGE_Y) as f64).abs()
     }
