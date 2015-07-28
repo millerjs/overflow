@@ -12,19 +12,11 @@ use threadpool::ThreadPool;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 
-// Field of view
-const FOVY: f64 = 60.0;
-
 // Bounding box dim constatns
 const BOX_X: f64 = 300.0;
 const BOX_Y: f64 = 600.0;
-const BOX_Z: f64 = 1.0;
+const BOX_Z: f64 = 50.0;
 
-// Image constants
-const IMAGE_X: i32 = 600;
-const IMAGE_Y: i32 = 400;
-const SCREEN: f64 = 400.0;
-const SCALE: f64 = IMAGE_X as f64 / 1200.0;
 const F_G: f64 = 1000.0;
 
 #[derive(Debug, Copy, Clone)]
@@ -39,10 +31,13 @@ pub struct Particle {
     elast: f64,
 }
 
-pub struct Image {
+pub struct Camera {
     pixels: Vec<[u8; 4]>,
+    screen: f64,
+    fovd: f64,
     width: i32,
     height: i32,
+    camera: [f64; 3],
 }
 
 pub struct Domain {
@@ -51,17 +46,35 @@ pub struct Domain {
     dt: f64,
     particles: Vec<Particle>,
     bbox: Vec<Particle>,
-    image: Image,
+    camera: Camera,
 }
 
-
 #[allow(dead_code)]
-impl Image {
-    fn new(width: i32, height: i32) -> Image {
-        Image {
+impl Camera {
+
+    /// Scale the apparent radius of the ellipse for perspective
+    fn projected_radius(&self, p: Particle) -> f64 {
+        let fov = self.fovd / 2.0 * PI / 180.0;
+        let d = p.r[2] + self.camera[2];
+        (1.2e-1 / fov.tan() * p.rad /
+            (d*d - p.rad*p.rad).sqrt() * (self.width) as f64).abs()
+    }
+
+    /// Get the x or y location as projected on the screen
+    fn projected(&self, r: [f64; 3]) -> [f64; 3] {
+        let dot = v_dot(r, self.camera) / v_norm(self.camera);
+        let x = v_scale(v_unit(self.camera), dot);
+        v_scale(v_sub(r, x), self.screen)
+    }
+
+    fn new(width: i32, height: i32, camera: [f64; 3]) -> Camera {
+        Camera {
             pixels: vec![[0; 4]; width as usize * height as usize],
             width: width,
             height: height,
+            camera: camera,
+            screen: 0.5,
+            fovd: 60.0
         }
     }
 
@@ -85,13 +98,14 @@ impl Image {
     }
 
     fn translate(&self, v: f64) -> i32 {
-         (v * SCALE) as i32
+        (v * self.width as f64 / 1200.0) as i32
     }
 
-    fn draw_circle(&mut self, _x: f64, _y: f64, r: f64, pixel: [f32; 4]) {
-        let x0 = (self.width/2 - self.translate(_x)) as i32;
-        let y0 = (self.height/2 - self.translate(_y)) as i32;
-        let mut x = r as i32;
+    fn draw_particle(&mut self, p: &Particle, pixel: [f32; 4]) {
+        let rp = self.projected(p.r);
+        let x0 = (self.width/2 - self.translate(rp[0])) as i32;
+        let y0 = (self.height/2 - self.translate(rp[1])) as i32;
+        let mut x = self.projected_radius(*p) as i32;
         let mut y = 0;
         let mut condition = 1 - x;
 
@@ -141,7 +155,6 @@ impl Image {
         })
 
     }
-
 }
 
 
@@ -162,12 +175,33 @@ fn v_sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     c
 }
 
+fn v_norm(a: [f64; 3]) -> f64 {
+    (a[0]*a[0] + a[1]*a[1] + a[2]*a[2]).sqrt()
+}
+
+fn v_scale(a: [f64; 3], n: f64) -> [f64; 3] {
+    [a[0]*n, a[1]*n, a[2]*n]
+}
+
+fn v_unit(a: [f64; 3]) -> [f64; 3] {
+    let norm = v_norm(a);
+    [a[0]/norm, a[1]/norm, a[2]/norm]
+}
+
+
 fn v_dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     let mut c = 0.0;
     for i in 0..3 {
         c += a[i] * b[i];
     };
     c
+}
+
+fn v_rot_z(a: [f64; 3], degrees: f64) -> [f64; 3] {
+    let rad = degrees * 0.0174532925;
+    [a[0] * rad.cos() - a[1] * rad.sin(),
+     a[0] * rad.cos() + a[1] * rad.sin(),
+     a[2]]
 }
 
 #[allow(dead_code)]
@@ -202,19 +236,6 @@ impl Particle {
     /// Get the distance of particle from origin
     fn dist(&self) -> f64 {
         (self.r[0]*self.r[0] + self.r[1]*self.r[1] + self.r[2]*self.r[2]).sqrt()
-    }
-
-    /// Scale the apparent radius of the ellipse for perspective
-    fn projected_radius(&self) -> f64 {
-        let fov = FOVY / 2.0 * PI / 180.0;
-        let d = self.r[2] + SCREEN;
-        (1.2e-1 / fov.tan() * self.rad /
-            (d*d - self.rad*self.rad).sqrt() * (IMAGE_Y) as f64).abs()
-    }
-
-    /// Get the x or y location as projected on the screen
-    fn projected(&self, r: f64) -> f64 {
-        SCREEN*r/(self.r[2] + SCREEN*2.0)
     }
 
     /// Update positions and velocities using velocity verlet scheme
@@ -332,17 +353,12 @@ impl Domain {
 
 
     fn render(&mut self) {
-        self.image.clear([0.0; 4]);
+        self.camera.clear([0.0; 4]);
         for p in self.bbox.iter(){
-            self.image.draw_circle(
-                p.projected(p.r[0]), p.projected(p.r[1]), p.projected_radius(),
-                [0.5, 0.5, 0.8, 1.0]);
+            self.camera.draw_particle(p, [0.5, 0.5, 0.8, 1.0]);
         }
         for p in self.particles.iter(){
-            self.image.draw_circle(
-                p.projected(p.r[0]), p.projected(p.r[1]), p.projected_radius(),
-                [0.5; 4]);
-
+            self.camera.draw_particle(p, [0.5; 4]);
         }
         self.render_step += 1;
     }
@@ -392,9 +408,11 @@ fn main() {
         render_step: 0,
         dt: 1.0e-2,
         t: 0.0,
-        image: Image::new(IMAGE_X, IMAGE_Y),
+        camera: Camera::new(600, 400, [0.0, 600.0, -600.0]),
     };
-    println!("Created image buffer of length {} KB", IMAGE_X*IMAGE_Y/1000);
+
+    println!("Created image buffer of length {} KB",
+             domain.camera.width*domain.camera.height/1000);
 
     domain.setup();
 
@@ -406,7 +424,7 @@ fn main() {
         if step % 5 == 0 {
             domain.print_state();
             domain.render();
-            domain.image.save(domain.render_step);
+            domain.camera.save(domain.render_step);
         }
         step += 1;
     }
