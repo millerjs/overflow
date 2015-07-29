@@ -11,11 +11,12 @@ use image::{ImageBuffer, Rgb};
 use threadpool::ThreadPool;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
+use std::cmp::{min, max};
 
 // Bounding box dim constatns
 const BOX_X: f64 = 300.0;
 const BOX_Y: f64 = 600.0;
-const BOX_Z: f64 = 50.0;
+const BOX_Z: f64 = 200.0;
 
 const F_G: f64 = 1000.0;
 
@@ -60,11 +61,13 @@ impl Camera {
             (d*d - p.rad*p.rad).sqrt() * (self.width) as f64).abs()
     }
 
-    /// Get the x or y location as projected on the screen
-    fn projected(&self, r: [f64; 3]) -> [f64; 3] {
-        let dot = v_dot(r, self.camera) / v_norm(self.camera);
-        let x = v_scale(v_unit(self.camera), dot);
-        v_scale(v_sub(r, x), self.screen)
+    /// Get the x, y location as projected on the screen
+    fn projected(&self, r: [f64; 3]) -> [i32; 2] {
+        let a = v_unit(self.camera) * v_dot(r, self.camera);
+        let b = v_sub(a, r);
+        // let d = v_scale(b, )
+
+        [self.width/2 - rp[0] as i32, self.height/2 - rp[1] as i32]
     }
 
     fn new(width: i32, height: i32, camera: [f64; 3]) -> Camera {
@@ -73,7 +76,7 @@ impl Camera {
             width: width,
             height: height,
             camera: camera,
-            screen: 0.5,
+            screen: 0.25,
             fovd: 60.0
         }
     }
@@ -88,23 +91,17 @@ impl Camera {
     }
 
     fn get_pixel(&mut self, x: i32, y: i32) -> [u8; 4]{
-        self.pixels[(self.height * x + y) as usize]
-    }
-
-    fn set_point(&mut self, x: f64, y: f64, pixel: [f32; 4]) {
-        let x = self.translate(x);
-        let y = self.translate(y);
-        self.set_pixel(x, y, pixel);
-    }
-
-    fn translate(&self, v: f64) -> i32 {
-        (v * self.width as f64 / 1200.0) as i32
+        if x < self.width && x > 0 && y < self.height && y > 0 {
+            let idx = (self.height * x + y) as usize;
+            self.pixels[idx]
+        } else {
+            [0; 4]
+        }
     }
 
     fn draw_particle(&mut self, p: &Particle, pixel: [f32; 4]) {
-        let rp = self.projected(p.r);
-        let x0 = (self.width/2 - self.translate(rp[0])) as i32;
-        let y0 = (self.height/2 - self.translate(rp[1])) as i32;
+        let translated = self.projected(p.r);
+        let (x0, y0) = (translated[0], translated[1]);
         let mut x = self.projected_radius(*p) as i32;
         let mut y = 0;
         let mut condition = 1 - x;
@@ -127,6 +124,24 @@ impl Camera {
             }
         }
     }
+
+    fn draw_line(&mut self, _p0: [f64; 3], _p1: [f64; 3], pixel: [f32; 4]) {
+        let p0 = self.projected(_p0);
+        let p1 = self.projected(_p1);
+        let condition = p0[0] < p1[0];
+        let (x0, y0, x1, y1) = (p0[0], p0[1], p1[0], p1[1]);
+        let (dx, dy) = (x1 - x0, y1 - y0);
+        if dx < dy {
+            for x in (min(x0, x1)..max(x0, x1)) {
+                self.set_pixel(x, y0+(x-x0)*dy/dx, pixel);
+            }
+        } else {
+            for y in (min(y0, y1)..max(y0, y1)) {
+                self.set_pixel(x0+(y-y0)*dx/dy, y, pixel);
+            }
+        }
+    }
+
 
     fn clear(&mut self, color: [f32; 4]) {
         for i in 0..(self.width*self.height) as usize {
@@ -190,18 +205,17 @@ fn v_unit(a: [f64; 3]) -> [f64; 3] {
 
 
 fn v_dot(a: [f64; 3], b: [f64; 3]) -> f64 {
-    let mut c = 0.0;
-    for i in 0..3 {
-        c += a[i] * b[i];
-    };
-    c
+    (0..3).fold(0.0, |sum, i| sum + a[i]*b[i])
 }
 
 fn v_rot_z(a: [f64; 3], degrees: f64) -> [f64; 3] {
     let rad = degrees * 0.0174532925;
-    [a[0] * rad.cos() - a[1] * rad.sin(),
-     a[0] * rad.cos() + a[1] * rad.sin(),
-     a[2]]
+    [a[0]*rad.cos()-a[1]*rad.sin(), a[0]*rad.cos()+a[1]*rad.sin(), a[2]]
+}
+
+fn v_rot_y(a: [f64; 3], degrees: f64) -> [f64; 3] {
+    let rad = degrees * 0.0174532925;
+    [a[0]*rad.cos()+a[2]*rad.sin(), a[1], -a[0]*rad.cos()+a[2]*rad.sin()]
 }
 
 #[allow(dead_code)]
@@ -314,7 +328,7 @@ impl Domain {
         let range = Range::new(-rad/5.0, rad/5.0);
         for x in 1..n {
             for y in 1..n {
-                for z in 1..2 {
+                for z in 1..5 {
                     self.particles.push(Particle::new(
                         rad,
                         - BOX_X + (
@@ -336,24 +350,39 @@ impl Domain {
     }
 
     fn add_bounding_box(&mut self) {
-        self.bbox.push(Particle::new(5.0, -BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(5.0,  BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(5.0,  BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(5.0, -BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(5.0, -BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(5.0,  BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(5.0,  BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
-        self.bbox.push(Particle::new(5.0, -BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0, -BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0,  BOX_X, -BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0,  BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0, -BOX_X,  BOX_Y,  BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0, -BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0,  BOX_X, -BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0,  BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
+        self.bbox.push(Particle::new(10.0, -BOX_X,  BOX_Y, -BOX_Z, 0.0, 0.0, 0.0));
     }
 
     fn setup(&mut self) {
-        self.add_particles_grid(10.0, 20);
+        self.add_particles_grid(10.0, 10);
         self.add_bounding_box();
     }
 
+    fn draw_bounding_box(&mut self) {
+        let p = [1.0; 4];
+        for z in [BOX_Z, -BOX_Z].iter() {
+            self.camera.draw_line([-BOX_X, BOX_Y, *z], [BOX_X,  BOX_Y, *z], p);
+            self.camera.draw_line([-BOX_X, -BOX_Y, *z], [BOX_X, -BOX_Y, *z], p);
+            self.camera.draw_line([BOX_X, -BOX_Y, *z], [BOX_X, BOX_Y, *z], p);
+            self.camera.draw_line([-BOX_X, -BOX_Y, *z], [-BOX_X, BOX_Y, *z], p);
+
+        }
+        for y in [BOX_Y, -BOX_Y].iter() {
+            self.camera.draw_line([-BOX_X, *y, -BOX_Z], [-BOX_X, *y, BOX_Z], p);
+            self.camera.draw_line([BOX_X, *y, -BOX_Z], [BOX_X, *y, BOX_Z], p);
+        }
+    }
 
     fn render(&mut self) {
         self.camera.clear([0.0; 4]);
+        self.draw_bounding_box();
         for p in self.bbox.iter(){
             self.camera.draw_particle(p, [0.5, 0.5, 0.8, 1.0]);
         }
@@ -408,7 +437,7 @@ fn main() {
         render_step: 0,
         dt: 1.0e-2,
         t: 0.0,
-        camera: Camera::new(600, 400, [0.0, 600.0, -600.0]),
+        camera: Camera::new(800, 500, [0.0, 200.0, -600.0]),
     };
 
     println!("Created image buffer of length {} KB",
@@ -416,7 +445,7 @@ fn main() {
 
     domain.setup();
 
-    let max_time = 0.5;
+    let max_time = 1.0;
     let mut step = 0;
 
     while domain.t < max_time {
