@@ -63,10 +63,10 @@ impl Camera {
 
     /// Get the x, y location as projected on the screen
     fn projected(&self, r: [f64; 3]) -> [i32; 2] {
-        let a = v_unit(self.camera) * v_dot(r, self.camera);
+        let a = v_scale(v_unit(self.camera), v_dot(r, self.camera));
         let b = v_sub(a, r);
-        // let d = v_scale(b, )
-
+        let rp = v_scale(v_sub(self.camera, a),
+                         v_norm(b)/(self.screen*v_norm(self.camera)));
         [self.width/2 - rp[0] as i32, self.height/2 - rp[1] as i32]
     }
 
@@ -361,7 +361,7 @@ impl Domain {
     }
 
     fn setup(&mut self) {
-        self.add_particles_grid(10.0, 10);
+        self.add_particles_grid(10.0, 4);
         self.add_bounding_box();
     }
 
