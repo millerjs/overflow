@@ -1,4 +1,3 @@
-extern crate num;
 extern crate rand;
 extern crate image;
 extern crate threadpool;
@@ -13,6 +12,10 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::cmp::{min, max};
 
+mod linalg;
+use linalg::Matrix;
+use linalg::Vec3d;
+
 // Bounding box dim constatns
 const BOX_X: f64 = 300.0;
 const BOX_Y: f64 = 600.0;
@@ -23,12 +26,12 @@ const F_G: f64 = 1000.0;
 #[derive(Debug, Copy, Clone)]
 pub struct Particle {
     id: u64,
-    r: [f64; 3],      // location
-    v: [f64; 3],      // velocity
-    a: [f64; 3],      // acceleration
-    ap: [f64; 3],     // acceleration from previous time-step
-    m: f64,           // mass
-    rad: f64,         // radius
+    r: Vec3d,      // location
+    v: Vec3d,      // velocity
+    a: Vec3d,      // acceleration
+    ap: Vec3d,     // acceleration from previous time-step
+    m: f64,        // mass
+    rad: f64,      // radius
     elast: f64,
 }
 
@@ -38,7 +41,8 @@ pub struct Camera {
     fovd: f64,
     width: i32,
     height: i32,
-    camera: [f64; 3],
+    camera: Vec3d,
+    theta: Vec3d,  // camera angle
 }
 
 pub struct Domain {
@@ -54,30 +58,33 @@ pub struct Domain {
 impl Camera {
 
     /// Scale the apparent radius of the ellipse for perspective
-    fn projected_radius(&self, p: Particle) -> f64 {
+    fn projected_radius(&self, r: Vec3d, rad: f64) -> f64 {
         let fov = self.fovd / 2.0 * PI / 180.0;
-        let d = p.r[2] + self.camera[2];
-        (1.2e-1 / fov.tan() * p.rad /
-            (d*d - p.rad*p.rad).sqrt() * (self.width) as f64).abs()
+        let d = (r - self.camera).norm();
+        (1.2e-1 / fov.tan() * rad /
+            (d*d - rad*rad).sqrt() * (self.width) as f64).abs()
     }
 
     /// Get the x, y location as projected on the screen
-    fn projected(&self, r: [f64; 3]) -> [i32; 2] {
-        let a = v_scale(v_unit(self.camera), v_dot(r, self.camera));
-        let b = v_sub(a, r);
-        let rp = v_scale(v_sub(self.camera, a),
-                         v_norm(b)/(self.screen*v_norm(self.camera)));
-        [self.width/2 - rp[0] as i32, self.height/2 - rp[1] as i32]
+    fn projected(&self, v: Vec3d) -> [i32; 2] {
+        let a = Matrix::rot_x(-self.theta[0]);
+        let b = Matrix::rot_y(-self.theta[1]);
+        let c = Matrix::rot_z(-self.theta[2]);
+        let d = &(&(&a * &b) * &c) * (v-self.camera);
+        let bx = (d[0] * self.width  as f64)/(d[2]*self.screen);
+        let by = (d[1] * self.height as f64)/(d[2]*self.screen);
+        [self.width/2 - bx as i32, self.height/2 - by as i32]
     }
 
-    fn new(width: i32, height: i32, camera: [f64; 3]) -> Camera {
+    fn new(width: i32, height: i32, camera: Vec3d) -> Camera {
         Camera {
             pixels: vec![[0; 4]; width as usize * height as usize],
             width: width,
             height: height,
             camera: camera,
-            screen: 0.25,
-            fovd: 60.0
+            screen: 5.0,
+            fovd: 60.0,
+            theta: Vec3d::new(0.0, 0.0, 0.0),
         }
     }
 
@@ -102,7 +109,7 @@ impl Camera {
     fn draw_particle(&mut self, p: &Particle, pixel: [f32; 4]) {
         let translated = self.projected(p.r);
         let (x0, y0) = (translated[0], translated[1]);
-        let mut x = self.projected_radius(*p) as i32;
+        let mut x = self.projected_radius(p.r, p.rad) as i32;
         let mut y = 0;
         let mut condition = 1 - x;
 
@@ -125,10 +132,9 @@ impl Camera {
         }
     }
 
-    fn draw_line(&mut self, _p0: [f64; 3], _p1: [f64; 3], pixel: [f32; 4]) {
+    fn draw_line(&mut self, _p0: Vec3d, _p1: Vec3d, pixel: [f32; 4]) {
         let p0 = self.projected(_p0);
         let p1 = self.projected(_p1);
-        let condition = p0[0] < p1[0];
         let (x0, y0, x1, y1) = (p0[0], p0[1], p1[0], p1[1]);
         let (dx, dy) = (x1 - x0, y1 - y0);
         if dx < dy {
@@ -174,51 +180,6 @@ impl Camera {
 
 
 #[allow(dead_code)]
-fn v_add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    let mut c = [0.0; 3];
-    for i in 0..3 {
-        c[i] = a[i] + b[i];
-    };
-    c
-}
-
-fn v_sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    let mut c = [0.0; 3];
-    for i in 0..3 {
-        c[i] = a[i] - b[i];
-    };
-    c
-}
-
-fn v_norm(a: [f64; 3]) -> f64 {
-    (a[0]*a[0] + a[1]*a[1] + a[2]*a[2]).sqrt()
-}
-
-fn v_scale(a: [f64; 3], n: f64) -> [f64; 3] {
-    [a[0]*n, a[1]*n, a[2]*n]
-}
-
-fn v_unit(a: [f64; 3]) -> [f64; 3] {
-    let norm = v_norm(a);
-    [a[0]/norm, a[1]/norm, a[2]/norm]
-}
-
-
-fn v_dot(a: [f64; 3], b: [f64; 3]) -> f64 {
-    (0..3).fold(0.0, |sum, i| sum + a[i]*b[i])
-}
-
-fn v_rot_z(a: [f64; 3], degrees: f64) -> [f64; 3] {
-    let rad = degrees * 0.0174532925;
-    [a[0]*rad.cos()-a[1]*rad.sin(), a[0]*rad.cos()+a[1]*rad.sin(), a[2]]
-}
-
-fn v_rot_y(a: [f64; 3], degrees: f64) -> [f64; 3] {
-    let rad = degrees * 0.0174532925;
-    [a[0]*rad.cos()+a[2]*rad.sin(), a[1], -a[0]*rad.cos()+a[2]*rad.sin()]
-}
-
-#[allow(dead_code)]
 impl Particle {
 
     /// Create a new particle
@@ -228,10 +189,10 @@ impl Particle {
         let mut rng = rand::thread_rng();
         Particle {
             id: Range::new(0, std::u64::MAX).ind_sample(&mut rng),
-            r: [rx, ry, rz],
-            v: [vx, vy, vz],
-            a: [0.0, 0.0, 0.0],
-            ap: [0.0, 0.0, 0.0],
+            r: Vec3d::new(rx, ry, rz),
+            v: Vec3d::new(vx, vy, vz),
+            a: Vec3d::zero(),
+            ap: Vec3d::zero(),
             m: 1.0,
             rad: rad,
             elast: 0.3,
@@ -267,8 +228,8 @@ impl Particle {
 
     fn surrounding_collisions(&mut self, positions: &Vec<Particle>) {
         for p in positions.iter() {
-            let r = v_sub(self.r, p.r);
-            let norm = v_dot(r, r).sqrt();
+            let r = self.r - p.r;
+            let norm = r.norm();
             let unit_r = [r[0]/norm, r[1]/norm, r[2]/norm];
             let overlap = self.rad + p.rad - norm;
             if norm > 0.0 && overlap > 0.0 {
@@ -284,7 +245,7 @@ impl Particle {
     /// particle at this point in time
     fn force_total (&mut self, positions: &Vec<Particle>) {
         self.ap = self.a;
-        self.a = [0.0; 3];
+        self.a = Vec3d::zero();
         self.surrounding_collisions(positions);
         self.force_gravity();
     }
@@ -368,15 +329,27 @@ impl Domain {
     fn draw_bounding_box(&mut self) {
         let p = [1.0; 4];
         for z in [BOX_Z, -BOX_Z].iter() {
-            self.camera.draw_line([-BOX_X, BOX_Y, *z], [BOX_X,  BOX_Y, *z], p);
-            self.camera.draw_line([-BOX_X, -BOX_Y, *z], [BOX_X, -BOX_Y, *z], p);
-            self.camera.draw_line([BOX_X, -BOX_Y, *z], [BOX_X, BOX_Y, *z], p);
-            self.camera.draw_line([-BOX_X, -BOX_Y, *z], [-BOX_X, BOX_Y, *z], p);
+            self.camera.draw_line(
+                Vec3d::new(-BOX_X, BOX_Y, *z),
+                Vec3d::new(BOX_X,  BOX_Y, *z), p);
+            self.camera.draw_line(
+                Vec3d::new(-BOX_X, -BOX_Y, *z),
+                Vec3d::new(BOX_X, -BOX_Y, *z), p);
+            self.camera.draw_line(
+                Vec3d::new(BOX_X, -BOX_Y, *z),
+                Vec3d::new(BOX_X, BOX_Y, *z), p);
+            self.camera.draw_line(
+                Vec3d::new(-BOX_X, -BOX_Y, *z),
+                Vec3d::new(-BOX_X, BOX_Y, *z), p);
 
         }
         for y in [BOX_Y, -BOX_Y].iter() {
-            self.camera.draw_line([-BOX_X, *y, -BOX_Z], [-BOX_X, *y, BOX_Z], p);
-            self.camera.draw_line([BOX_X, *y, -BOX_Z], [BOX_X, *y, BOX_Z], p);
+            self.camera.draw_line(
+                Vec3d::new(-BOX_X, *y, -BOX_Z),
+                Vec3d::new(-BOX_X, *y, BOX_Z), p);
+            self.camera.draw_line(
+                Vec3d::new(BOX_X, *y, -BOX_Z),
+                Vec3d::new(BOX_X, *y, BOX_Z), p);
         }
     }
 
@@ -437,12 +410,11 @@ fn main() {
         render_step: 0,
         dt: 1.0e-2,
         t: 0.0,
-        camera: Camera::new(800, 500, [0.0, 200.0, -600.0]),
+        camera: Camera::new(800, 500, Vec3d::new(0.0, 0.0, -600.0)),
     };
 
     println!("Created image buffer of length {} KB",
              domain.camera.width*domain.camera.height/1000);
-
     domain.setup();
 
     let max_time = 1.0;
@@ -458,6 +430,6 @@ fn main() {
         step += 1;
     }
 
-    thread::sleep_ms(1000);
+    thread::sleep_ms(2000);
 
 }
