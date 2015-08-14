@@ -23,6 +23,13 @@ impl Matrix<f64> {
         Matrix {n: n, m: m, data: vec![val; n*m]}
     }
 
+    pub fn projection(theta: Vec3d) -> Matrix<f64> {
+        let a = Matrix::rot_x(-theta[0]);
+        let b = Matrix::rot_y(-theta[1]);
+        let c = Matrix::rot_z(-theta[2]);
+        &(&a * &b) * &c
+    }
+
     pub fn rot_x(theta: f64) -> Matrix<f64> {
         Matrix::from_data(3, 3, vec![
             1.0,     0.0,          0.0,
@@ -42,6 +49,16 @@ impl Matrix<f64> {
             theta.cos(), -theta.sin(), 0.0,
             theta.sin(),  theta.cos(), 0.0,
                 0.0,          0.0,     1.0])
+    }
+
+    /// Householder transform
+    pub fn householder(normal: Vec3d, scale: f64) -> Matrix<f64> {
+        let n = normal.unit()*scale;
+        let (a, b, c) = (n[0], n[1], n[2]);
+        Matrix::from_data(
+            3, 3, vec![1.0-2.0*a*a,  -2.0*a*b  ,   -2.0*a*c,
+                       -2.0*a*b   , 1.0-2.0*b*b,   -2.0*b*c,
+                       -2.0*a*c   ,  -2.0*b*c  , 1.0-2.0*c*c])
     }
 
     pub fn from(array: Vec<Vec<f64>>) -> Matrix<f64> {
@@ -178,16 +195,13 @@ impl<'a> ops::Mul<&'a Matrix<f64>> for &'a Matrix<f64> {
 impl<'a> ops::Mul<Vec3d> for &'a Matrix<f64> {
     type Output = Vec3d;
     fn mul(self, v: Vec3d) -> Vec3d {
-        let other = v.to_matrix();
-        let mut new = Matrix::zero(other.n, self.m);
-        for i in 0..other.n {
-            for j in 0..self.m {
-                for k in 0..other.m {
-                    new[(i, j)] += other[(i, k)] * self[(k, j)]
-                }
+        let mut new = Vec3d::zero();
+        for row in 0..3 {
+            for k in 0..3 {
+                new[row] += v[k] * self[(k, row)]
             }
         }
-        new.to_vec3d()
+        new
     }
 }
 
@@ -262,9 +276,9 @@ impl Vec3d {
         Vec3d::new(self[0]/norm, self[1]/norm, self[2]/norm)
     }
 
-    // pub fn rot_x(&self, theta: f64) -> Vec3d {
-    //     let r = Matrix::rot_x(theta);
-    // }
+    pub fn rot_x(&self, angle: f64) -> Vec3d {
+        &Matrix::rot_x(angle)**self
+    }
 
 }
 
