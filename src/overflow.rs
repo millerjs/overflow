@@ -10,6 +10,7 @@ pub struct Particle {
     pub m: f64,        // mass
     pub rad: f64,      // radius
     pub elast: f64,
+    pub dens: f64,
 }
 
 

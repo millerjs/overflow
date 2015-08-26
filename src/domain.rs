@@ -9,10 +9,11 @@ use linalg::Vec3d;
 use overflow::{Domain,Particle};
 
 // Bounding box dim constatns
-pub const BOX_X: f64 = 300.0;
+pub const BOX_X: f64 = 600.0;
 pub const BOX_Y: f64 = 600.0;
-pub const BOX_Z: f64 = 200.0;
-pub const F_G: f64 = 5.0e3;
+pub const BOX_Z: f64 = 300.0;
+pub const BOX: [f64; 3] = [BOX_X, BOX_Y, BOX_Z];
+pub const F_G: f64 = 1.0e3;
 
 #[allow(dead_code)]
 impl Domain {
@@ -44,7 +45,7 @@ impl Domain {
 
     pub fn draw_bounding_box(&mut self) {
         let p = [1.0; 4];
-        let lft_y = 0.0;
+        let lft_y = -BOX_Y;
         // top
         self.camera.draw_line(Vec3d::new( BOX_X,  BOX_Y,  BOX_Z), Vec3d::new( BOX_X,  BOX_Y, -BOX_Z), p);
         self.camera.draw_line(Vec3d::new(-BOX_X,  BOX_Y,  BOX_Z), Vec3d::new(-BOX_X,  BOX_Y, -BOX_Z), p);

@@ -16,7 +16,7 @@ use overflow::Domain;
 
 fn main() {
 
-    let max_time = 10.0;
+    let max_time = 5.0;
     let mut step = 0;
 
     let mut domain = Domain {
@@ -27,14 +27,11 @@ fn main() {
         t: 0.0,
     };
 
-    println!("Created image buffer of length {} KB",
-             domain.camera.width*domain.camera.height/1000);
-
-    domain.add_particles_random(25.0, 1000);
+    domain.add_particles_random(25.0, 2000);
 
     while domain.t < max_time {
         domain.update();
-        if step % 5 == 0 {
+        if step % 10 == 0 {
             domain.print_state();
             domain.render();
             domain.camera.revolve_y(0.05);

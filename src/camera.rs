@@ -17,6 +17,8 @@ use overflow::Particle;
 impl Camera {
 
     pub fn new(width: i32, height: i32, r: Vec3d) -> Camera {
+        println!("Creating image buffer of length {} KB", width*height/1000);
+
         Camera {
             pixels: vec![[0; 4]; width as usize * height as usize],
             render_step: 0,
@@ -94,6 +96,7 @@ impl Camera {
                 condition += 2 * (y - x) + 1;
             }
         }
+
     }
 
     pub fn draw_line(&mut self, _p0: Vec3d, _p1: Vec3d, pixel: [f32; 4]) {
